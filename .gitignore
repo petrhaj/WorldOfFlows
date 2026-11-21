@@ -1,0 +1,3 @@
+target/
+data/spatial/*.json
+data/spatial/*.gpkg-journal
