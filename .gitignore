@@ -1,3 +1,6 @@
 target/
 data/spatial/*.json
+data/spatial/*.gpkg
 data/spatial/*.gpkg-journal
+data/spatial/*.gpkg-wal
+data/spatial/*.gpkg-shm
