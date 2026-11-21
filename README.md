@@ -26,7 +26,13 @@ Each modeled person generates two tours. The model deliberately assigns 99.99% o
 
 - size coefficient: 1.0 times `ln(destination population)`
 - time coefficient: -0.01 per hour
-- cost coefficient: -0.00002 per USD/tonne
+- passenger-cost coefficient: -0.00002 per EUR/passenger
+
+Generated links retain an estimated EUR/tonne cargo cost and include a separate
+EUR/passenger cost for passenger routing. The current simplified model uses the
+same mode rates and surcharges for both measures, while keeping their units and
+network attributes distinct. Estimated costs use a fixed conversion of 1 EUR
+per USD.
 
 Cross-continent tours are assigned to direct airport-to-airport air links and written to `data/spatial/world_lod0_routed.gpkg` as `pax_flow` values.
 

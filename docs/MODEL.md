@@ -56,7 +56,11 @@ where $R=6371.0088$ km. The implementation uses longitude/latitude in radians.
 
 ## 3. Link travel time and cost
 
-For each link mode $m$, distance is converted to travel time and operating cost:
+For each link mode $m$, distance is converted to travel time and operating cost.
+The generator stores the estimated cost separately in EUR/tonne for cargo and
+EUR/passenger for passenger journeys. The estimates use a fixed conversion of
+1 EUR per USD. The simplified model currently applies
+the same mode rates and surcharges to both cost measures:
 
 $$
 t_m = \frac{d}{v_m}
@@ -68,7 +72,7 @@ $$
 
 where:
 
-| Mode | Speed $v_m$ (km/h) | Cost rate $k_m$ (USD/km) |
+| Mode | Speed $v_m$ (km/h) | Cost rate $k_m$ (EUR/km) |
 |---|---:|---:|
 | Air | 850 | 0.18 |
 | Sea | 24 | 0.050 |
@@ -76,7 +80,7 @@ where:
 | Rail | 50 | 0.55 |
 | Other/connector | 40 | 0.85 |
 
-Connector links have a minimum distance of 15 km and add a 25 USD cost. Air links add 180 USD and sea links add 60 USD.
+Connector links have a minimum distance of 15 km and add a 25 EUR cost. Air links add 180 EUR and sea links add 60 EUR.
 
 ## 4. Impedance matrices
 
@@ -95,7 +99,9 @@ $$
 C(o,d)=\min_{p \in P(o,d)}\sum_{e \in p} c_e
 $$
 
-These produce separate time and cost matrices used by the destination-choice model.
+These produce separate time and passenger-cost matrices used by the
+destination-choice model. Cargo cost remains available as a link attribute but
+is not used in passenger route choice.
 
 ## 5. Tour generation
 
@@ -128,7 +134,7 @@ where:
 
 - $P_d$ is destination population;
 - $T(o,d)$ is shortest-path travel time in hours;
-- $C(o,d)$ is shortest-path cost in USD/tonne.
+- $C(o,d)$ is shortest-path cost in EUR/passenger.
 
 The probability of choosing destination $d$ is:
 

@@ -5,6 +5,10 @@ DATABASE = "data/spatial/world_lod0_routed.gpkg"
 con = sqlite3.connect(DATABASE)
 print("size:", os.path.getsize(DATABASE), "bytes")
 print("tables:", [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY 1")])
+link_columns = {r[1] for r in con.execute("PRAGMA table_info(links)")}
+assert "cost_eur_per_tonne" in link_columns
+assert "cost_eur_per_passenger" in link_columns
+print("passenger cost column:", "cost_eur_per_passenger" in link_columns)
 print("pax column:", [r for r in con.execute("PRAGMA table_info(links)") if r[1] == "pax_flow"])
 print("pax total:", con.execute("SELECT sum(pax_flow) FROM links").fetchone()[0])
 print("air pax:", con.execute("SELECT sum(pax_flow) FROM links WHERE mode='air'").fetchone()[0])

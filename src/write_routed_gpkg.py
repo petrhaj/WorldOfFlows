@@ -14,6 +14,34 @@ with open(flows_json, "r", encoding="utf-8") as f:
     payload = json.load(f)
 
 columns = {row[1] for row in con.execute("PRAGMA table_info(links)")}
+source_con = sqlite3.connect(source)
+source_columns = {row[1] for row in source_con.execute("PRAGMA table_info(links)")}
+for old_column, new_column in (
+    ("cost_usd_per_tonne", "cost_eur_per_tonne"),
+    ("cost_usd_per_passenger", "cost_eur_per_passenger"),
+):
+    if new_column not in source_columns:
+        source_con.close()
+        con.close()
+        raise RuntimeError("Source GeoPackage is missing links." + new_column)
+    if new_column not in columns:
+        if old_column in columns:
+            con.execute(
+                "ALTER TABLE links RENAME COLUMN {} TO {}".format(old_column, new_column)
+            )
+        else:
+            con.execute(
+                "ALTER TABLE links ADD COLUMN {} DOUBLE NOT NULL DEFAULT 0".format(new_column)
+            )
+        columns.add(new_column)
+    values = source_con.execute(
+        "SELECT link_id,{} FROM links".format(new_column)
+    ).fetchall()
+    con.executemany(
+        "UPDATE links SET {}=? WHERE link_id=?".format(new_column),
+        [(value, link_id) for link_id, value in values],
+    )
+source_con.close()
 if "pax_flow" not in columns:
     con.execute("ALTER TABLE links ADD COLUMN pax_flow REAL NOT NULL DEFAULT 0")
 else:
@@ -45,7 +73,9 @@ def line(ax, ay, bx, by):
 
 con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('flow_model','Two tours per person; multinomial logit destination choice with 99.99 percent same-continent retention target')")
 con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('population_source','United Nations World Population Prospects 2024; simplified 2025 continental population totals')")
-con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('logit_parameters','size coefficient=1.0 on ln(destination population), time coefficient=-0.01 per hour, cost coefficient=-0.00002 per USD/tonne')")
+con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('cost_unit','Estimated EUR per metric tonne')")
+con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('passenger_cost_unit','Estimated EUR per passenger per link')")
+con.execute("INSERT OR REPLACE INTO network_metadata(key,value) VALUES ('logit_parameters','size coefficient=1.0 on ln(destination population), time coefficient=-0.01 per hour, cost coefficient=-0.00002 per EUR/passenger')")
 
 for row in payload["link_flows"]:
     con.execute("UPDATE links SET pax_flow=pax_flow+? WHERE link_id=?",

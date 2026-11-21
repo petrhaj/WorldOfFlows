@@ -17,7 +17,7 @@ struct GpkgLink {
     to_node: String,
     mode: String,
     travel_time_hours: f64,
-    cost_usd_per_tonne: f64,
+    cost_eur_per_passenger: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,12 @@ fn read_gpkg(source: &str) -> Result<GpkgLoad, Box<dyn std::error::Error>> {
                 to_node: item.get("to_node").and_then(Value::as_str).unwrap_or_default().to_string(),
                 mode: item.get("mode").and_then(Value::as_str).unwrap_or_default().to_string(),
                 travel_time_hours: item.get("travel_time_hours").and_then(Value::as_f64).unwrap_or(0.0),
-                cost_usd_per_tonne: item.get("cost_usd_per_tonne").and_then(Value::as_f64).unwrap_or(0.0),
+                cost_eur_per_passenger: item.get("cost_eur_per_passenger")
+                    .and_then(Value::as_f64)
+                    .ok_or_else(|| std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "link is missing a valid cost_eur_per_passenger",
+                    ))?,
             });
         }
     }
@@ -106,7 +111,7 @@ fn dijkstra(
         if !allowed { continue; }
         let weight = match cost_attribute {
             CostAttribute::Time => link.travel_time_hours,
-            CostAttribute::Cost => link.cost_usd_per_tonne,
+            CostAttribute::PassengerCost => link.cost_eur_per_passenger,
         };
         adjacency.entry(link.from_node.clone()).or_default().push((link.to_node.clone(), weight));
         adjacency.entry(link.to_node.clone()).or_default().push((link.from_node.clone(), weight));
@@ -144,7 +149,7 @@ fn dijkstra(
 }
 
 #[derive(Clone, Copy)]
-enum CostAttribute { Time, Cost }
+enum CostAttribute { Time, PassengerCost }
 
 fn find_air_link(links: &[GpkgLink], from_airport: &str, to_airport: &str) -> Option<String> {
     links.iter().find(|link| {
@@ -173,7 +178,7 @@ pub fn calculate_and_route_flows(source: &str, destination: &str) -> Result<(), 
         .collect();
 
     let time_matrix = dijkstra(&centroid_ids, &nodes, &loaded.links, CostAttribute::Time);
-    let cost_matrix = dijkstra(&centroid_ids, &nodes, &loaded.links, CostAttribute::Cost);
+    let cost_matrix = dijkstra(&centroid_ids, &nodes, &loaded.links, CostAttribute::PassengerCost);
 
     let mut airport_by_continent: HashMap<String, String> = HashMap::new();
     for node in &loaded.nodes {

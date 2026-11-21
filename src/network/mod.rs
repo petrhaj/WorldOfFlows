@@ -140,18 +140,19 @@ pub fn generate_network() -> Result<(), Box<dyn std::error::Error>> {
         let a = node_map[&e.from];
         let b = node_map[&e.to];
         let mut distance = haversine_km((a.lon, a.lat), (b.lon, b.lat));
-        let (speed, cost_per_km) = match e.mode.as_str() {
+        let (speed, cost_eur_per_km) = match e.mode.as_str() {
             "air" => (850.0, 0.18), "sea" => (24.0, 0.050), "road" => (60.0, 1.20),
             "rail" => (50.0, 0.55), _ => (40.0, 0.85),
         };
         if e.mode == "connector" { distance = distance.max(15.0); }
         let time = distance / speed;
-        let mut cost = distance * cost_per_km;
-        if e.mode == "connector" { cost += 25.0; }
-        if e.mode == "air" { cost += 180.0; }
-        if e.mode == "sea" { cost += 60.0; }
+        let mut cost_eur_per_tonne = distance * cost_eur_per_km;
+        if e.mode == "connector" { cost_eur_per_tonne += 25.0; }
+        if e.mode == "air" { cost_eur_per_tonne += 180.0; }
+        if e.mode == "sea" { cost_eur_per_tonne += 60.0; }
+        let cost_eur_per_passenger = cost_eur_per_tonne;
         let physical = if e.mode == "air" || e.mode == "sea" || e.mode == "connector" || e.from != "AN_CTR" && e.to != "AN_CTR" { 1 } else { 0 };
-        json.push_str(&format!("{{\"id\":{},\"from\":{},\"to\":{},\"mode\":{},\"stage\":{},\"name\":{},\"distance\":{},\"time\":{},\"cost\":{},\"physical\":{},\"a_lon\":{},\"a_lat\":{},\"b_lon\":{},\"b_lat\":{}}}", js(&e.id), js(&e.from), js(&e.to), js(&e.mode), js(&e.stage), js(&e.name), distance, time, cost, physical, a.lon, a.lat, b.lon, b.lat));
+        json.push_str(&format!("{{\"id\":{},\"from\":{},\"to\":{},\"mode\":{},\"stage\":{},\"name\":{},\"distance\":{},\"time\":{},\"cost_eur_per_tonne\":{},\"cost_eur_per_passenger\":{},\"physical\":{},\"a_lon\":{},\"a_lat\":{},\"b_lon\":{},\"b_lat\":{}}}", js(&e.id), js(&e.from), js(&e.to), js(&e.mode), js(&e.stage), js(&e.name), distance, time, cost_eur_per_tonne, cost_eur_per_passenger, physical, a.lon, a.lat, b.lon, b.lat));
     }
     json.push_str("]}");
 
@@ -160,11 +161,12 @@ pub fn generate_network() -> Result<(), Box<dyn std::error::Error>> {
     let gpkg = "data/spatial/world_lod0.gpkg";
 
     fs::write(network_json, &json)?;
-    if fs::metadata(gpkg).is_err() {
-        let status = Command::new("python")
-            .args(["src/write_gpkg.py", network_json, gpkg])
-            .status()?;
-        if !status.success() { return Err("GeoPackage writer failed".into()); }
+    let gpkg_exists = fs::metadata(gpkg).is_ok();
+    let status = Command::new("python")
+        .args(["src/write_gpkg.py", network_json, gpkg])
+        .status()?;
+    if !status.success() { return Err("GeoPackage writer failed".into()); }
+    if !gpkg_exists {
         println!("Created {} ({} nodes, {} links)", gpkg, nodes.len(), links.len());
     } else {
         println!("Preserved existing {} ({} nodes, {} links)", gpkg, nodes.len(), links.len());

@@ -1,9 +1,47 @@
 import json
+import os
 import sqlite3
 import struct
 import sys
 
 src, dst = sys.argv[1], sys.argv[2]
+
+if os.path.exists(dst):
+    con = sqlite3.connect(dst)
+    columns = {row[1] for row in con.execute("PRAGMA table_info(links)")}
+    if "cost_eur_per_tonne" not in columns:
+        if "cost_usd_per_tonne" not in columns:
+            con.close()
+            raise RuntimeError("Existing GeoPackage is missing links.cost_usd_per_tonne")
+        con.execute(
+            "ALTER TABLE links RENAME COLUMN cost_usd_per_tonne TO cost_eur_per_tonne"
+        )
+        columns.remove("cost_usd_per_tonne")
+        columns.add("cost_eur_per_tonne")
+    if "cost_eur_per_passenger" not in columns:
+        if "cost_usd_per_passenger" in columns:
+            con.execute(
+                "ALTER TABLE links RENAME COLUMN cost_usd_per_passenger TO cost_eur_per_passenger"
+            )
+        else:
+            con.execute(
+                "ALTER TABLE links ADD COLUMN cost_eur_per_passenger DOUBLE NOT NULL DEFAULT 0"
+            )
+            con.execute(
+                "UPDATE links SET cost_eur_per_passenger=cost_eur_per_tonne"
+            )
+    con.execute(
+        "INSERT OR REPLACE INTO network_metadata(key,value) VALUES "
+        "('cost_unit','Estimated EUR per metric tonne')"
+    )
+    con.execute(
+        "INSERT OR REPLACE INTO network_metadata(key,value) VALUES "
+        "('passenger_cost_unit','Estimated EUR per passenger per link')"
+    )
+    con.commit()
+    con.close()
+    sys.exit(0)
+
 with open(src, "r", encoding="utf-8") as f:
     data = json.load(f)
 
@@ -42,7 +80,8 @@ CREATE TABLE links (
  link_id TEXT PRIMARY KEY, from_node TEXT NOT NULL, to_node TEXT NOT NULL,
  mode TEXT NOT NULL, stage TEXT NOT NULL, name TEXT NOT NULL,
  distance_km DOUBLE NOT NULL, travel_time_hours DOUBLE NOT NULL,
- cost_usd_per_tonne DOUBLE NOT NULL, bidirectional INTEGER NOT NULL,
+ cost_eur_per_tonne DOUBLE NOT NULL, cost_eur_per_passenger DOUBLE NOT NULL,
+ bidirectional INTEGER NOT NULL,
  physical_possible INTEGER NOT NULL, geom_wkt TEXT NOT NULL, geom BLOB NOT NULL
 );
 INSERT INTO gpkg_contents(table_name,data_type,identifier,description,min_x,min_y,max_x,max_y,srs_id)
@@ -54,7 +93,8 @@ INSERT INTO gpkg_geometry_columns VALUES ('links','geom','LINESTRING',4326,0,0);
 INSERT INTO network_metadata VALUES ('description','World LOD0 multimodal transport network: 7 continental centroids, local airport and seaport gateways, and simplified road/rail/sea/air links');
 INSERT INTO network_metadata VALUES ('model','Access-egress and linehaul stages; links are bidirectional where the table flag is set');
 INSERT INTO network_metadata VALUES ('source','Open public representative coordinates and deliberately estimated speeds/costs; no proprietary routing data');
-INSERT INTO network_metadata VALUES ('cost_unit','Estimated USD per metric tonne');
+INSERT INTO network_metadata VALUES ('cost_unit','Estimated EUR per metric tonne');
+INSERT INTO network_metadata VALUES ('passenger_cost_unit','Estimated EUR per passenger per link');
 """)
 
 def gpkg_header():
@@ -79,8 +119,8 @@ for n in data["nodes"]:
 for e in data["links"]:
     wkt = "LINESTRING ({} {}, {} {})".format(
         e["a_lon"],e["a_lat"],e["b_lon"],e["b_lat"])
-    con.execute("INSERT INTO links VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (
-        e["id"],e["from"],e["to"],e["mode"],e["stage"],e["name"],e["distance"],e["time"],e["cost"],1,e["physical"],wkt,line(e["a_lon"],e["a_lat"],e["b_lon"],e["b_lat"])))
+    con.execute("INSERT INTO links VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+        e["id"],e["from"],e["to"],e["mode"],e["stage"],e["name"],e["distance"],e["time"],e["cost_eur_per_tonne"],e["cost_eur_per_passenger"],1,e["physical"],wkt,line(e["a_lon"],e["a_lat"],e["b_lon"],e["b_lat"])))
 con.execute("CREATE INDEX idx_links_from ON links(from_node)")
 con.execute("CREATE INDEX idx_links_to ON links(to_node)")
 con.execute("CREATE INDEX idx_links_mode ON links(mode)")
